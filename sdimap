@@ -1,0 +1,194 @@
+#!/bin/sh
+
+readonly cmd=sdimap
+
+usage() {
+    echo "Usage: $cmd VERB [args]
+
+Manage a standalone instance of a Dovecot IMAP server. The standalone instance
+runs under the current user account and lives in the current directory.
+
+Verbs:
+  init      — create new instance in \$PWD ($cmd init --help)
+  start     — start the IMAP server
+  stop      — stop the IMAP server
+  get NAME  — get configuration value for NAME setting"
+}
+
+main() {
+    if [ $# -eq 0 ]; then
+        usage
+        return
+    fi
+
+    local verb="$1"
+    shift
+
+    case "$verb" in
+        help|--help|-h) usage       ;;
+                  init) init "$@"   ;;
+                 start) start "$@"  ;;
+                  stop) xstop "$@"  ;;
+                status) status "$@" ;;
+                   get) get "$@"    ;;
+        *)
+           echo "Error: unrecognized verb '$verb'" >&2
+           return 1
+           ;;
+    esac
+}
+
+init() {
+    local port=10143
+
+    while getopts p: opt; do
+        case "$opt" in
+            p) port="$OPTARG" ;;
+        esac
+    done
+    OPTIND=1
+
+    create_instance "$(get_current_directory)" "$port"
+}
+
+start() {
+    local base_dir="$(get_current_directory)/.dovecot"
+
+    if ! [ -d "$base_dir" ]; then
+        echo "Error: current directory not an sdimap instance. Have you run \`sdimap init\`?" >&2
+        return 1
+    fi
+
+    if [ -f "$base_dir/master.pid" ]; then
+        echo "Already running" >&2
+    else
+        dovecot -c .dovecot.conf
+    fi
+}
+
+xstop() {
+    local base_dir="$(get_current_directory)/.dovecot"
+
+    if ! [ -d "$base_dir" ]; then
+        echo "Error: current directory not an sdimap instance. Have you run \`sdimap init\`?" >&2
+        return 1
+    fi
+
+    local pid_file="$base_dir/master.pid"
+    if ! [ -f "$pid_file" ]; then
+        echo "Not running" >&2
+        return
+    fi
+
+    kill "$(cat "$pid_file")"
+    while [ -f "$pid_file" ]; do
+        sleep 1
+    done
+}
+
+status() {
+    local base_dir="$(get_current_directory)/.dovecot"
+    local pid_file="$base_dir/master.pid"
+    if [ ! -d "$base_dir" ]; then
+        echo "Not an instance"
+    elif [ -f "$pid_file" ]; then
+        echo Running
+    else
+        echo Stopped
+    fi
+}
+
+get() {
+    if [ $# -eq 0 ]; then
+        echo "Usage: $cmd get NAME
+
+Available Settings: password, port" >&2
+        return 1
+    fi
+
+    local conf_path="$(get_current_directory)/.dovecot.conf"
+
+    case "$1" in
+        password|port) _get_$1 ;;
+        *)
+            echo "Error: unrecognized setting '$1'" >&2; return 1 ;;
+    esac
+}
+
+_get_password() {
+    sed -nE 's/.*args = password=(.*)/\1/ p' "$conf_path"
+}
+
+_get_port() {
+    sed -nE 's/.*port = (.*)/\1/ p' "$conf_path"
+}
+
+create_instance() {
+    local dir="$1"
+    local imap_port="$2"
+
+    local base_dir="$dir/.dovecot"
+    local conf_path="$dir/.dovecot.conf"
+    local current_user="$USER"
+    local password="$(generate_password)"
+
+    if [ -d "$base_dir" ]; then
+        echo "Error: instance already exists at '$dir'" >&2
+        return 1
+    fi
+
+    create_directory "$base_dir"
+    (umask 077; create_config >|"$conf_path")
+}
+
+create_config() {
+cat <<-EOF
+listen = 127.0.0.1 ::1
+ssl = no
+
+base_dir      = $base_dir
+state_dir     = $base_dir/state
+log_path      = $dir/dovecot.log
+mail_location = maildir:$dir/%u
+
+default_login_user = $current_user
+default_internal_user = \$default_login_user
+
+protocols = imap
+
+service anvil {
+  chroot =
+}
+
+service imap-login {
+  chroot =
+  inet_listener imap {
+    port = $imap_port
+  }
+}
+
+userdb {
+  driver = static
+}
+
+passdb {
+  driver = static
+  args = password=$password
+}
+EOF
+}
+
+generate_password() {
+    local length="${1:-22}"  # 22 = 128 / log( 26 + 26 + 10, 2 )
+    cat /dev/urandom | tr -dc [:alnum:] | head -c "$length"
+}
+
+get_current_directory() {
+    pwd -P
+}
+
+create_directory() {
+    mkdir -p -- "$1"
+}
+
+main "$@"

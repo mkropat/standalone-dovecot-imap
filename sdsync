@@ -1,0 +1,153 @@
+#!/bin/sh
+
+readonly cmd=sdsync
+
+usage() {
+    echo "Usage: $cmd VERB [args]
+
+Tool for getting mail into and out of a standalone Dovecot instance.
+
+Verbs:
+  mirror ACCOUNT SERVER — synchonize all mail on ACCOUNT between local
+                          instance and SERVER
+  push ACCOUNT SERVER   — send all mail on ACCOUNT from local instance
+                          to SERVER
+  pull ACCOUNT SERVER   — retrieve all mail from ACCOUNT on SERVER and
+                          store in local instance"
+}
+
+readonly poll_frequency=60 # seconds
+
+main() {
+    if [ $# -eq 0 ]; then
+        usage
+        exit
+    fi
+
+    local verb="$1"
+    shift
+
+    case "$verb" in
+          help|--help|-h) usage       ;;
+                  mirror) mirror "$@" ;;
+               push|pull) backup "$@" ;;
+        *)
+            echo "Error: unrecognized verb '$verb'" >&2
+            return 1
+            ;;
+    esac
+}
+
+mirror() {
+    if [ $# -lt 2 ]; then
+        echo "Usage: $cmd $verb ACCOUNT SERVER"
+        return
+    fi
+
+    local debug_arg
+    local is_watching
+
+    while getopts Dw opt; do
+        case "$opt" in
+            D) debug_arg=-D  ;;
+            w) is_watching=1 ;;
+        esac
+    done
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
+
+    local action_args=mirror
+
+    local conf_path=.dovecot.conf
+    local local_user="$USER"
+
+    _run_sync "$@"
+}
+
+backup() {
+    if [ $# -lt 2 ]; then
+        echo "Usage: $cmd $verb ACCOUNT SERVER
+
+Options:
+  -d — delete mail on the destination so as to match source (MANDATORY)"
+        return
+    fi
+
+    local debug_arg
+    local will_delete_mail
+    local is_watching
+
+    while getopts dDw opt; do
+        case "$opt" in
+            d) will_delete_mail=1 ;;
+            D) debug_arg=-D       ;;
+            w) is_watching=1      ;;
+        esac
+    done
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
+
+    if [ -z "$will_delete_mail" ]; then
+        echo "Error: you must pass '-d' (delete mail) when using '$verb'" >&2
+        return 1
+    fi
+
+    local action_args
+    case "$verb" in
+          push) action_args=backup      ;;
+          pull) action_args="-R backup" ;;
+    esac
+
+    local conf_path=.dovecot.conf
+    local local_user="$USER"
+
+    _run_sync "$@"
+}
+
+_run_sync() {
+    _ensure_sdimap_running || return
+
+    if [ -z "$is_watching" ]; then
+        _run_dsync "$1" "$2"
+    else
+        while :; do
+            _run_dsync "$1" "$2"
+            sleep "$poll_frequency"
+        done
+    fi
+}
+
+_ensure_sdimap_running() {
+    local status="$(sdimap status)"
+
+    case "$status" in
+        "Not an instance")
+            echo "Error: current directory not an sdimap instance. Have you run \`sdimap init\`?" >&2
+            return 1
+            ;;
+        Stopped) # If it's not running, start it for the duration of the sync
+            sdimap start
+            trap exit INT
+            trap "sdimap stop; exit" EXIT
+            ;;
+        Running) # Do nothing
+            ;; 
+        *)
+            echo "Error: got unexpected status '$status' from sdimap" >&2
+            return 1
+            ;;
+    esac
+}
+
+_run_dsync() {
+    local mailuser="$1"
+    local server="$2"
+
+    if [ -z "$server_user" ]; then
+        local server_user=root
+    fi
+
+    dsync $debug_arg -c "$conf_path" -u "$mailuser" $action_args ssh "$server_user@$server" dsync -u "$mailuser"
+}
+
+main "$@"
