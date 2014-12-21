@@ -2,6 +2,14 @@
 
 *Keep a local IMAP mirror, painlessly* 
 
+### Installation
+
+    git clone https://github.com/mkropat/standalone-dovecot-imap.git
+    cd standalone-dovecot-imap
+    sudo make install
+
+### Usage
+
 Use the `sdimap` tool to set up a standalone Dovecot IMAP instance in seconds:
 
     mkdir mail-mirror
