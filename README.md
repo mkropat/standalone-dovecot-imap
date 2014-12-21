@@ -17,11 +17,11 @@ ensuring all your emails are encrypted.
 Before you connect to the local IMAP mirror, you'll want to download all your
 email from your server:
 
-    sdsync mirror youruser@yourdomain.com yourserver.yourdomain.com
+    sdsync mirror youruser@yourdomain.com youruser@yourserver.yourdomain.com
 
 Replace `youruser@yourdomain.com` with your email account, and
-`yourserver.yourdomain.com` with the hostname of the server that hosts your
-email with Dovecot.
+`youruser@yourserver.yourdomain.com` with the system username and hostname of
+the server that hosts your email with Dovecot.
 
 Now you're ready to connect to the local IMAP mirror with your mail client of
 choice.  Instead of port `143`, use the output of `sdimap get port`:

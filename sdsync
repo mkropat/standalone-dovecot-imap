@@ -13,12 +13,28 @@ Verbs:
   push ACCOUNT SERVER   — send all mail on ACCOUNT from local instance
                           to SERVER
   pull ACCOUNT SERVER   — retrieve all mail from ACCOUNT on SERVER and
-                          store in local instance"
+                          store in local instance
+
+Options:
+  -D — print debugging information
+  -S — don't sudo before running dsync on SERVER"
 }
 
 readonly poll_frequency=60 # seconds
 
 main() {
+    local dsync_cmd_arg="sudo dsync"
+    local debug_arg
+
+    local OPTIND
+    while getopts DhS opt; do
+        case "$opt" in
+            D) debug_arg=-D  ;;
+            S) dsync_cmd_arg="dsync"  ;;
+        esac
+    done
+    shift $(( OPTIND - 1 ))
+
     if [ $# -eq 0 ]; then
         usage
         exit
@@ -28,9 +44,9 @@ main() {
     shift
 
     case "$verb" in
-          help|--help|-h) usage       ;;
-                  mirror) mirror "$@" ;;
-               push|pull) backup "$@" ;;
+          help|--help) usage       ;;
+               mirror) mirror "$@" ;;
+            push|pull) backup "$@" ;;
         *)
             echo "Error: unrecognized verb '$verb'" >&2
             return 1
@@ -44,17 +60,15 @@ mirror() {
         return
     fi
 
-    local debug_arg
     local is_watching
 
-    while getopts Dw opt; do
+    local OPTIND
+    while getopts w opt; do
         case "$opt" in
-            D) debug_arg=-D  ;;
             w) is_watching=1 ;;
         esac
     done
     shift $(( OPTIND - 1 ))
-    OPTIND=1
 
     local action_args=mirror
 
@@ -73,19 +87,17 @@ Options:
         return
     fi
 
-    local debug_arg
     local will_delete_mail
     local is_watching
 
-    while getopts dDw opt; do
+    local OPTIND
+    while getopts dw opt; do
         case "$opt" in
             d) will_delete_mail=1 ;;
-            D) debug_arg=-D       ;;
             w) is_watching=1      ;;
         esac
     done
     shift $(( OPTIND - 1 ))
-    OPTIND=1
 
     if [ -z "$will_delete_mail" ]; then
         echo "Error: you must pass '-d' (delete mail) when using '$verb'" >&2
@@ -131,7 +143,7 @@ _ensure_sdimap_running() {
             trap "sdimap stop; exit" EXIT
             ;;
         Running) # Do nothing
-            ;; 
+            ;;
         *)
             echo "Error: got unexpected status '$status' from sdimap" >&2
             return 1
@@ -143,11 +155,15 @@ _run_dsync() {
     local mailuser="$1"
     local server="$2"
 
-    if [ -z "$server_user" ]; then
-        local server_user=root
+    if ! _contains "$server" "@"; then
+        server="root@$server"
     fi
 
-    dsync $debug_arg -c "$conf_path" -u "$mailuser" $action_args ssh "$server_user@$server" dsync -u "$mailuser"
+    dsync $debug_arg -c "$conf_path" -u "$mailuser" $action_args ssh "$server" $dsync_cmd_arg -u "$mailuser"
+}
+
+_contains() {
+    test "${1#*$2}" != "$1"
 }
 
 main "$@"
