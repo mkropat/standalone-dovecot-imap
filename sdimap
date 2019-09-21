@@ -160,11 +160,16 @@ base_dir      = $base_dir
 state_dir     = $base_dir/state
 log_path      = $dir/dovecot.log
 mail_location = maildir:$dir/%u
+mail_attribute_dict = file:$dir/%u/dovecot-attributes
 
 default_login_user = $current_user
 default_internal_user = \$default_login_user
 
 protocols = imap
+
+protocol imap {
+    imap_metadata = yes
+}
 
 service anvil {
   chroot =
