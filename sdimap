@@ -64,6 +64,10 @@ start() {
     if [ -f "$base_dir/master.pid" ]; then
         echo "Already running" >&2
     else
+        if ! hash dovecot 2>/dev/null; then
+            echo "dovecot command not found. Have you installed it?" >&2
+            exit 1
+        fi
         dovecot -c .dovecot.conf
     fi
 }
