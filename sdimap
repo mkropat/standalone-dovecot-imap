@@ -44,6 +44,7 @@ init() {
     while getopts p: opt; do
         case "$opt" in
             p) port="$OPTARG" ;;
+            *) echo "Unexpected option: $opt" >&2 ;;
         esac
     done
     OPTIND=1
@@ -52,7 +53,8 @@ init() {
 }
 
 start() {
-    local base_dir="$(get_current_directory)/.dovecot"
+    local base_dir
+    base_dir="$(get_current_directory)/.dovecot"
 
     if ! [ -d "$base_dir" ]; then
         echo "Error: current directory not an sdimap instance. Have you run \`sdimap init\`?" >&2
@@ -67,7 +69,8 @@ start() {
 }
 
 xstop() {
-    local base_dir="$(get_current_directory)/.dovecot"
+    local base_dir
+    base_dir="$(get_current_directory)/.dovecot"
 
     if ! [ -d "$base_dir" ]; then
         echo "Error: current directory not an sdimap instance. Have you run \`sdimap init\`?" >&2
@@ -87,7 +90,8 @@ xstop() {
 }
 
 status() {
-    local base_dir="$(get_current_directory)/.dovecot"
+    local base_dir
+    base_dir="$(get_current_directory)/.dovecot"
     local pid_file="$base_dir/master.pid"
     if [ ! -d "$base_dir" ]; then
         echo "Not an instance"
@@ -106,10 +110,11 @@ Available Settings: password, port" >&2
         return 1
     fi
 
-    local conf_path="$(get_current_directory)/.dovecot.conf"
+    local conf_path
+    conf_path="$(get_current_directory)/.dovecot.conf"
 
     case "$1" in
-        password|port) _get_$1 ;;
+        password|port) "_get_$1" ;;
         *)
             echo "Error: unrecognized setting '$1'" >&2; return 1 ;;
     esac
@@ -130,7 +135,8 @@ create_instance() {
     local base_dir="$dir/.dovecot"
     local conf_path="$dir/.dovecot.conf"
     local current_user="$USER"
-    local password="$(generate_password)"
+    local password
+    password="$(generate_password 22)" # 22 = 128 / log( 26 + 26 + 10, 2 )
 
     if [ -d "$base_dir" ]; then
         echo "Error: instance already exists at '$dir'" >&2
@@ -179,8 +185,8 @@ EOF
 }
 
 generate_password() {
-    local length="${1:-22}"  # 22 = 128 / log( 26 + 26 + 10, 2 )
-    cat /dev/urandom | tr -dc [:alnum:] | head -c "$length"
+    local length="$1"
+    tr -dc '[:alnum:]' < /dev/urandom | head -c "$length"
 }
 
 get_current_directory() {
