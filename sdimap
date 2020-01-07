@@ -61,7 +61,7 @@ start() {
         return 1
     fi
 
-    if [ -f "$base_dir/master.pid" ]; then
+    if is_running "$base_dir/master.pid"; then
         echo "Already running" >&2
     else
         if ! hash dovecot 2>/dev/null; then
@@ -82,7 +82,7 @@ xstop() {
     fi
 
     local pid_file="$base_dir/master.pid"
-    if ! [ -f "$pid_file" ]; then
+    if ! is_running "$pid_file"; then
         echo "Not running" >&2
         return
     fi
@@ -99,7 +99,7 @@ status() {
     local pid_file="$base_dir/master.pid"
     if [ ! -d "$base_dir" ]; then
         echo "Not an instance"
-    elif [ -f "$pid_file" ]; then
+    elif is_running "$pid_file"; then
         echo Running
     else
         echo Stopped
@@ -200,6 +200,10 @@ generate_password() {
 
 get_current_directory() {
     pwd -P
+}
+
+is_running() {
+  [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null
 }
 
 create_directory() {
