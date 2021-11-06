@@ -175,6 +175,24 @@ service anvil {
   chroot =
 }
 
+service dict {
+  unix_listener dict {
+    mode = 0
+  }
+}
+
+service dict-async {
+  unix_listener dict-async {
+    mode = 0
+  }
+}
+
+service imap-hibernate {
+  unix_listener imap-hibernate {
+    mode = 0
+  }
+}
+
 service imap-login {
   chroot =
   inet_listener imap {
